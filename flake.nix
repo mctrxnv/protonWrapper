@@ -1,8 +1,4 @@
 {
-  description = ''
-    CLI controller for qBittorrent with autocompletion support
-  '';
-
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
