@@ -6,12 +6,12 @@
 
 let
   proton-ge = pkgs.callPackage ./proton-ge.nix { };
-  proton_dir = "${proton-ge}/share/proton-ge";
+  proton_dir = proton-ge + "/bin";
 in
 
 pkgs.stdenvNoCC.mkDerivation {
-  pname = "proton-game-runner";
-  version = "1.2";
+  pname = "protonWrapper";
+  version = "unstable";
 
   src = ./.;
 
@@ -20,10 +20,10 @@ pkgs.stdenvNoCC.mkDerivation {
     autoPatchelfHook
   ];
   buildInputs = with pkgs; [
+    wayland
     bash
     wine
     dxvk
-    winetricks
   ];
 
   dontBuild = true;
@@ -51,7 +51,6 @@ pkgs.stdenvNoCC.mkDerivation {
         ]
       } \
       --set         DXVK_PATH         ${pkgs.dxvk} \
-      --set         WINETRICKS_PATH   ${pkgs.winetricks} \
       --set-default PROTON_DIR       "${proton_dir}" \
       --set-default PROTON_PREFIX    "${proton_prefix}"
 
@@ -67,26 +66,19 @@ pkgs.stdenvNoCC.mkDerivation {
       --replace 'GE-Proton*' 'GE-Proton* | sort -Vr'
   '';
 
-  postFixup = ''
-    # Add desktop file with FSR options in comment
-    mkdir -p $out/share/applications
-    cat > $out/share/applications/proton-game-runner.desktop << EOF
-    [Desktop Entry]
-    Name=Proton Game Runner
-    Comment=Run games with FSR support (--fsr --fsr-level N --fsr-sharpening N)
-    Exec=run-with-proton %f
-    Icon=wine
-    Terminal=true
-    Type=Application
-    Categories=Game;Emulator;
-    MimeType=application/x-ms-dos-executable;application/x-executable;
-    EOF
-  '';
-
   meta = with lib; {
     description = "Game runner with FSR support for Proton/Wine and native Linux games";
     homepage = "https://github.com/mctrxnv/protonWrapper";
     license = licenses.mit;
     platforms = platforms.linux;
+    maintainers = [
+      {
+        email = "xfalwa@gmail.com";
+        github = "mctrxnv";
+        githubId = 31189199;
+        name = "Azikx";
+      }
+    ];
+    mainProgram = "pgr";
   };
 }

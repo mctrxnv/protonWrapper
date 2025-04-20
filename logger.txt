@@ -1,0 +1,3 @@
+Noita (Aug 12 2024) - 20250420-032055
+-------------------------------------------
+ERROR: Video initialization failed:  wayland not available

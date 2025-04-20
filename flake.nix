@@ -15,14 +15,21 @@
             ;
         };
         lib = inputs.nixpkgs.lib;
-      in
-      {
-        packages.default = import ./package.nix {
+
+        wrapper = import ./package.nix {
           inherit
             pkgs
             lib
             ;
         };
+      in
+      {
+        packages.default = pkgs.writeShellScriptBin "proton-run" (
+          let
+            _ = " ";
+          in
+          ("exec" + _ + lib.getExe pkgs.steam-run-free + _ + lib.getExe wrapper + _ + "$@")
+        );
       }
     );
 }

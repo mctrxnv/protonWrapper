@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+
+# Run games with FSR, Proton/Wine or native Linux support
+
+# Default parameters
+PROTON_PREFIX="${PROTON_PREFIX:-$HOME/.proton}"
+STEAM_INSTALL_PATH="${STEAM_INSTALL_PATH:-$HOME/.steam/root}"
+DXVK_HUD=0
+PROTON_USE_WINED3D=0
+USE_WINE=0
+FSR_ENABLED=0
+FSR_LEVEL=1  # Default FSR quality level (0-5)
+FSR_SHARPENING=2  # Default sharpening (0-5)
+EXE_FILE=""
+IS_LINUX_GAME=0
+
+# Автоматическое определение последней версии Proton GE
+find_latest_proton() {
+    local proton_dir="$HOME/.steam/steam/compatibilitytools.d"
+    local latest_proton=""
+    local max_version=0
+
+    if [[ -d "$proton_dir" ]]; then
+        for dir in "$proton_dir"/GE-Proton*; do
+            if [[ -d "$dir" ]]; then
+                # Извлекаем номер версии (формат GE-ProtonX-Y)
+                local version=$(basename "$dir" | grep -oP '(?<=GE-Proton)\d+-\d+')
+                if [[ "$version" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                    local major=${BASH_REMATCH[1]}
+                    local minor=${BASH_REMATCH[2]}
+                    # Сравниваем как числа (major * 100 + minor)
+                    local version_num=$((major * 100 + minor))
+                    if (( version_num > max_version )); then
+                        max_version=$version_num
+                        latest_proton="$dir"
+                    fi
+                fi
+            fi
+        done
+    fi
+
+    echo "$latest_proton"
+}
+
+# Установка PROTON_DIR по умолчанию
+PROTON_DIR="${PROTON_DIR:-$(find_latest_proton)}"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            echo "Usage: $0 [OPTIONS] /path/to/game[.exe]"
+            echo ""
+            echo "Options:"
+            echo "  -h, --help           Show this help message"
+            echo "  --hud                Enable DXVK HUD (Windows games)"
+            echo "  --prefix PATH        Set custom Proton/Wine prefix"
+            echo "  --proton PATH        Set custom Proton GE path"
+            echo "  --steam PATH         Set custom Steam path"
+            echo "  --opengl             Use OpenGL instead of Vulkan"
+            echo "  --wine               Force using Wine instead of Proton"
+            echo "  --fsr                Enable FidelityFX Super Resolution"
+            echo "  --fsr-level N        Set FSR quality level (0-5)"
+            echo "  --fsr-sharpening N   Set FSR sharpening (0-5)"
+            echo ""
+            echo "Environment variables:"
+            echo "  PROTON_DIR, PROTON_PREFIX, STEAM_INSTALL_PATH"
+            exit 0
+            ;;
+        --hud)
+            DXVK_HUD=1
+            shift
+            ;;
+        --prefix)
+            PROTON_PREFIX="$2"
+            shift 2
+            ;;
+        --proton)
+            PROTON_DIR="$2"
+            shift 2
+            ;;
+        --steam)
+            STEAM_INSTALL_PATH="$2"
+            shift 2
+            ;;
+        --opengl)
+            PROTON_USE_WINED3D=1
+            shift
+            ;;
+        --wine)
+            USE_WINE=1
+            shift
+            ;;
+        --fsr)
+            FSR_ENABLED=1
+            shift
+            ;;
+        --fsr-level)
+            if [[ "$2" =~ ^[0-5]$ ]]; then
+                FSR_LEVEL="$2"
+                FSR_ENABLED=1
+            else
+                echo "❌ Invalid FSR level. Must be between 0-5" >&2
+                exit 1
+            fi
+            shift 2
+            ;;
+        --fsr-sharpening)
+            if [[ "$2" =~ ^[0-5]$ ]]; then
+                FSR_SHARPENING="$2"
+                FSR_ENABLED=1
+            else
+                echo "❌ Invalid FSR sharpening. Must be between 0-5" >&2
+                exit 1
+            fi
+            shift 2
+            ;;
+        *)
+            # Handle quoted and unquoted paths
+            if [[ "$1" =~ ^\"(.*)\"$ || "$1" =~ ^\'(.*)\'$ ]]; then
+                EXE_FILE="${BASH_REMATCH[1]}"
+            else
+                EXE_FILE="$1"
+            fi
+            EXE_FILE="${EXE_FILE%\"}"
+            EXE_FILE="${EXE_FILE#\"}"
+            EXE_FILE="${EXE_FILE%\'}"
+            EXE_FILE="${EXE_FILE#\'}"
+            shift
+            break
+            ;;
+    esac
+done
+
+# Validate game file
+if [[ -z "$EXE_FILE" ]]; then
+    echo "❌ No game specified!" >&2
+    exit 1
+fi
+
+if [[ ! -e "$EXE_FILE" ]]; then
+    echo "❌ File/directory '$EXE_FILE' doesn't exist!" >&2
+    exit 1
+fi
+
+# Determine game type
+if [[ "$EXE_FILE" == *.exe || "$EXE_FILE" == *.EXE ]]; then
+    IS_LINUX_GAME=0
+else
+    IS_LINUX_GAME=1
+    if [[ $FSR_ENABLED -eq 1 ]]; then
+        echo "⚠️ FSR is only supported for Windows games"
+        FSR_ENABLED=0
+    fi
+fi
+
+# Windows game setup
+if [[ $IS_LINUX_GAME -eq 0 ]]; then
+    if [[ $USE_WINE -eq 0 ]]; then
+        if [[ -z "$PROTON_DIR" || ! -f "$PROTON_DIR/proton" ]]; then
+            echo "⚠️ Proton not found in $PROTON_DIR, falling back to Wine..."
+            USE_WINE=1
+        else
+            echo "ℹ️ Using Proton from: $PROTON_DIR"
+        fi
+    fi
+
+    # Configure FSR
+    if [[ $FSR_ENABLED -eq 1 ]]; then
+        export WINE_FULLSCREEN_FSR=1
+        export WINE_FULLSCREEN_FSR_LEVEL="$FSR_LEVEL"
+        export WINE_FULLSCREEN_FSR_STRENGTH="$FSR_SHARPENING"
+        echo "🔍 FSR enabled (Level: $FSR_LEVEL, Sharpening: $FSR_SHARPENING)"
+    fi
+
+    export WINEDLLOVERRIDES="dxgi,d3d11,d3d10core,d3d9=n,b"
+    export DXVK_HUD
+    export PROTON_USE_WINED3D
+
+    if [[ ! -d "$PROTON_PREFIX" ]]; then
+        mkdir -p "$PROTON_PREFIX"
+    fi
+fi
+
+# Run the game
+echo "=== Launch Settings ==="
+echo "Game:          $EXE_FILE"
+if [[ $IS_LINUX_GAME -eq 0 ]]; then
+    echo "Mode:          $([[ $USE_WINE -eq 1 ]] && echo "Wine" || echo "Proton")"
+    echo "FSR:           $([[ $FSR_ENABLED -eq 1 ]] && echo "Level $FSR_LEVEL (Sharpening $FSR_SHARPENING)" || echo "Disabled")"
+    echo "DXVK HUD:      $([[ $DXVK_HUD -eq 1 ]] && echo "Enabled" || echo "Disabled")"
+    echo "Render:        $([[ $PROTON_USE_WINED3D -eq 1 ]] && echo "OpenGL" || echo "Vulkan")"
+else
+    echo "Mode:          Native Linux"
+fi
+echo "==============================="
+
+if [[ $IS_LINUX_GAME -eq 1 ]]; then
+    if [[ -d "$EXE_FILE" ]]; then
+        cd "$EXE_FILE"
+        LAUNCHER=""
+        for launcher in launcher.sh start.sh start; do
+            [[ -f "$launcher" ]] && LAUNCHER="$launcher" && break
+        done
+        if [[ -n "$LAUNCHER" ]]; then
+            exec ./"$LAUNCHER"
+        else
+            exec ./"$(find . -maxdepth 1 -type f -executable | head -n 1)"
+        fi
+    else
+        exec "$EXE_FILE"
+    fi
+else
+    if [[ $USE_WINE -eq 1 ]]; then
+        WINEPREFIX="$PROTON_PREFIX" wine "$EXE_FILE"
+    else
+        export STEAM_COMPAT_DATA_PATH="$PROTON_PREFIX"
+        export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_INSTALL_PATH"
+        exec "$PROTON_DIR/proton" run "$EXE_FILE"
+    fi
+fi
