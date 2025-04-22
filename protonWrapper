@@ -40,6 +40,24 @@ USE_WINE=0
 EXE_FILE=""
 IS_LINUX_GAME=0
 
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            echo "Usage: $0 [OPTIONS] /path/to/game.exe"
+            exit 0
+            ;;
+        *)
+            # Обработка путей с пробелами
+            if [[ -z "$EXE_FILE" ]]; then
+                EXE_FILE="$1"
+            else
+                EXE_FILE="$EXE_FILE $1"
+            fi
+            shift
+            ;;
+    esac
+done
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -98,10 +116,17 @@ while [[ $# -gt 0 ]]; do
             EXE_FILE="${EXE_FILE#\"}"
             EXE_FILE="${EXE_FILE%\'}"
             EXE_FILE="${EXE_FILE#\'}"
-            
+
+            # Обработка путей с пробелами
+            if [[ -z "$EXE_FILE" ]]; then
+                EXE_FILE="$1"
+            else
+                EXE_FILE="$EXE_FILE $1"
+            fi
             shift
             break  # Stop parsing after getting the game path
             ;;
+
     esac
 done
 
